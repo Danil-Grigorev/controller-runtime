@@ -176,6 +176,9 @@ func (blder *Builder) WatchesMetadata(object client.Object, eventHandler handler
 //
 // STOP! Consider using For(...), Owns(...), Watches(...), WatchesMetadata(...) instead.
 // This method is only exposed for more advanced use cases, most users should use one of the higher level functions.
+//
+// Example:
+// WatchesRawSource(source.Kind(cache, &corev1.Pod{}), eventHandler, opts...) // ensure that source propagates only valid Pod objects.
 func (blder *Builder) WatchesRawSource(src source.Source, eventHandler handler.EventHandler, opts ...WatchesOption) *Builder {
 	input := WatchesInput{src: src, eventHandler: eventHandler}
 	for _, opt := range opts {
@@ -313,7 +316,7 @@ func (blder *Builder) doWatch() error {
 	}
 	for _, w := range blder.watchesInput {
 		// If the source of this watch is of type Kind, project it.
-		if srcKind, ok := w.src.(*internalsource.Kind); ok {
+		if srcKind, ok := w.src.(*internalsource.Kind[client.Object]); ok {
 			typeForSrc, err := blder.project(srcKind.Type, w.objectProjection)
 			if err != nil {
 				return err
