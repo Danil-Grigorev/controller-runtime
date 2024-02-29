@@ -29,6 +29,10 @@ import (
 
 var log = logf.RuntimeLog.WithName("predicate").WithName("eventFilters")
 
+type PredicateConstraint interface {
+	Register()
+}
+
 // Predicate filters events before enqueuing the keys.
 type Predicate = TypedPredicate[client.Object]
 
@@ -45,6 +49,21 @@ type TypedPredicate[T any] interface {
 
 	// Generic returns true if the Generic event should be processed
 	Generic(event.TypedGenericEvent[T]) bool
+}
+
+// ObjectPredicate filters events for type before enqueuing the keys.
+type ObjectPredicate[T any] interface {
+	// Create returns true if the Create event should be processed
+	OnCreate(obj T) bool
+
+	// Delete returns true if the Delete event should be processed
+	OnDelete(obj T) bool
+
+	// Update returns true if the Update event should be processed
+	OnUpdate(old, new T) bool
+
+	// Generic returns true if the Generic event should be processed
+	OnGeneric(obj T) bool
 }
 
 var _ Predicate = Funcs{}
@@ -103,6 +122,66 @@ func (p TypedFuncs[T]) Generic(e event.TypedGenericEvent[T]) bool {
 		return p.GenericFunc(e)
 	}
 	return true
+}
+
+// Funcs is a function that implements Predicate.
+type ObjectFuncs[T any] struct {
+	// Create returns true if the Create event should be processed
+	CreateFunc func(obj T) bool
+
+	// Delete returns true if the Delete event should be processed
+	DeleteFunc func(obj T) bool
+
+	// Update returns true if the Update event should be processed
+	UpdateFunc func(old, new T) bool
+
+	// Generic returns true if the Generic event should be processed
+	GenericFunc func(obj T) bool
+}
+
+// Update implements Predicate.
+func (p ObjectFuncs[T]) Update(e event.UpdateEvent) bool {
+	new, ok := e.ObjectNew.(T)
+	old, oldOk := e.ObjectOld.(T)
+	return ok && oldOk && p.OnUpdate(old, new)
+}
+
+// Generic implements Predicate.
+func (p ObjectFuncs[T]) Generic(e event.GenericEvent) bool {
+	obj, ok := e.Object.(T)
+	return ok && p.OnGeneric(obj)
+}
+
+// Create implements Predicate.
+func (p ObjectFuncs[T]) Create(e event.CreateEvent) bool {
+	obj, ok := e.Object.(T)
+	return ok && p.OnCreate(obj)
+}
+
+// Delete implements Predicate.
+func (p ObjectFuncs[T]) Delete(e event.DeleteEvent) bool {
+	obj, ok := e.Object.(T)
+	return ok && p.OnDelete(obj)
+}
+
+// Update implements Predicate.
+func (p ObjectFuncs[T]) OnUpdate(old, new T) bool {
+	return p.UpdateFunc == nil || p.UpdateFunc(old, new)
+}
+
+// Generic implements Predicate.
+func (p ObjectFuncs[T]) OnGeneric(obj T) bool {
+	return p.GenericFunc == nil || p.GenericFunc(obj)
+}
+
+// Create implements Predicate.
+func (p ObjectFuncs[T]) OnCreate(obj T) bool {
+	return p.CreateFunc == nil || p.CreateFunc(obj)
+}
+
+// Delete implements Predicate.
+func (p ObjectFuncs[T]) OnDelete(obj T) bool {
+	return p.DeleteFunc == nil || p.DeleteFunc(obj)
 }
 
 // NewPredicateFuncs returns a predicate funcs that applies the given filter function
@@ -328,6 +407,59 @@ func (a and[T]) Generic(e event.TypedGenericEvent[T]) bool {
 	return true
 }
 
+// All returns a composite predicate that implements a logical AND of the predicates passed to it.
+func All[T any](predicates ...ObjectPredicate[T]) ObjectPredicate[T] {
+	return all[T]{predicates}
+}
+
+type all[T any] struct {
+	predicates []ObjectPredicate[T]
+}
+
+// OnCreate implements ObjectPredicate.
+func (a all[T]) OnCreate(obj T) bool {
+	for _, p := range a.predicates {
+		if !p.OnCreate(obj) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// OnDelete implements ObjectPredicate.
+func (a all[T]) OnDelete(obj T) bool {
+	for _, p := range a.predicates {
+		if !p.OnDelete(obj) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// OnGeneric implements ObjectPredicate.
+func (a all[T]) OnGeneric(obj T) bool {
+	for _, p := range a.predicates {
+		if !p.OnGeneric(obj) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// OnUpdate implements ObjectPredicate.
+func (a all[T]) OnUpdate(old, new T) bool {
+	for _, p := range a.predicates {
+		if !p.OnUpdate(old, new) {
+			return false
+		}
+	}
+
+	return true
+}
+
 // Or returns a composite predicate that implements a logical OR of the predicates passed to it.
 func Or[T any](predicates ...TypedPredicate[T]) TypedPredicate[T] {
 	return or[T]{predicates}
@@ -373,6 +505,59 @@ func (o or[T]) Generic(e event.TypedGenericEvent[T]) bool {
 	return false
 }
 
+// Any returns a composite predicate that implements a logical OR of the predicates passed to it.
+func Any[T any](predicates ...ObjectPredicate[T]) ObjectPredicate[T] {
+	return anyOf[T]{predicates}
+}
+
+type anyOf[T any] struct {
+	predicates []ObjectPredicate[T]
+}
+
+// OnCreate implements ObjectPredicate.
+func (a anyOf[T]) OnCreate(obj T) bool {
+	for _, p := range a.predicates {
+		if p.OnCreate(obj) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// OnDelete implements ObjectPredicate.
+func (a anyOf[T]) OnDelete(obj T) bool {
+	for _, p := range a.predicates {
+		if p.OnDelete(obj) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// OnGeneric implements ObjectPredicate.
+func (a anyOf[T]) OnGeneric(obj T) bool {
+	for _, p := range a.predicates {
+		if p.OnGeneric(obj) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// OnUpdate implements ObjectPredicate.
+func (a anyOf[T]) OnUpdate(old, new T) bool {
+	for _, p := range a.predicates {
+		if p.OnUpdate(old, new) {
+			return true
+		}
+	}
+
+	return false
+}
+
 // Not returns a predicate that implements a logical NOT of the predicate passed to it.
 func Not[T any](predicate TypedPredicate[T]) TypedPredicate[T] {
 	return not[T]{predicate}
@@ -396,6 +581,35 @@ func (n not[T]) Delete(e event.TypedDeleteEvent[T]) bool {
 
 func (n not[T]) Generic(e event.TypedGenericEvent[T]) bool {
 	return !n.predicate.Generic(e)
+}
+
+// Neg returns a predicate that implements a logical NOT of the predicate passed to it.
+func Neg[T any](predicate ObjectPredicate[T]) ObjectPredicate[T] {
+	return neg[T]{predicate}
+}
+
+type neg[T any] struct {
+	predicate ObjectPredicate[T]
+}
+
+// OnCreate implements ObjectPredicate.
+func (n neg[T]) OnCreate(obj T) bool {
+	return !n.predicate.OnCreate(obj)
+}
+
+// OnDelete implements ObjectPredicate.
+func (n neg[T]) OnDelete(obj T) bool {
+	return !n.predicate.OnDelete(obj)
+}
+
+// OnGeneric implements ObjectPredicate.
+func (n neg[T]) OnGeneric(obj T) bool {
+	return !n.predicate.OnGeneric(obj)
+}
+
+// OnUpdate implements ObjectPredicate.
+func (n neg[T]) OnUpdate(old T, new T) bool {
+	return !n.predicate.OnUpdate(old, new)
 }
 
 // LabelSelectorPredicate constructs a Predicate from a LabelSelector.

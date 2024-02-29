@@ -36,6 +36,11 @@ type Kind[T client.Object] struct {
 	startCancel func()
 }
 
+// SetPredicates implements source.SyncingSource.
+func (ks *Kind[T]) SetPredicates(...predicate.PredicateConstraint) {
+	panic("unimplemented")
+}
+
 // Start is internal and should be called only by the Controller to register an EventHandler with the Informer
 // to enqueue reconcile.Requests.
 func (ks *Kind[T]) Start(ctx context.Context, queue workqueue.RateLimitingInterface) error {
