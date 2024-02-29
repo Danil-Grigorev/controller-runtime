@@ -187,6 +187,13 @@ var _ = Describe("Source", func() {
 			Expect(err.Error()).To(ContainSubstring("must create Kind with a non-nil cache"))
 		})
 
+		It("should return an error from Start cache was not provided", func() {
+			instance := source.ObjectKind(nil, &corev1.Pod{})
+			err := instance.Start(ctx, nil, nil)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("must create Kind with a non-nil cache"))
+		})
+
 		It("should return an error from Start if a type was not provided", func() {
 			instance := source.Kind[client.Object](ic, nil, nil)
 			err := instance.Start(ctx, nil)
@@ -198,6 +205,13 @@ var _ = Describe("Source", func() {
 			err := instance.Start(ctx, nil)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("must create Kind with non-nil handler"))
+		})
+
+		It("should return an error from Start if a type was not provided", func() {
+			instance := source.ObjectKind[client.Object](ic, nil)
+			err := instance.Start(ctx, nil, nil)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("must create Kind with a non-nil object"))
 		})
 
 		It("should return an error if syncing fails", func() {

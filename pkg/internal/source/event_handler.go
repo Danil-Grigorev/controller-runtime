@@ -131,7 +131,7 @@ func (e *EventHandler[T]) OnDelete(obj interface{}) {
 	// This should never happen if we aren't missing events, which we have concluded that we are not
 	// and made decisions off of this belief.  Maybe this shouldn't be here?
 	var ok bool
-	if _, ok = obj.(client.Object); !ok {
+	if _, ok = obj.(T); !ok {
 		// If the object doesn't have Metadata, assume it is a tombstone object of type DeletedFinalStateUnknown
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
