@@ -34,11 +34,24 @@ type Kind[T client.Object] struct {
 	// contain an error, startup and syncing finished.
 	startedErr  chan error
 	startCancel func()
+
+	predicates []predicate.ObjectPredicate[T]
+	handler    handler.ObjectHandler[T]
 }
 
 // SetPredicates implements source.SyncingSource.
 func (ks *Kind[T]) SetPredicates(...predicate.PredicateConstraint) {
 	panic("unimplemented")
+}
+
+func (ks *Kind[T]) PrepareObject(h handler.ObjectHandler[T], prct ...predicate.ObjectPredicate[T]) {
+	ks.handler = h
+	ks.predicates = prct
+}
+
+func (ks *Kind[T]) Prepare(h handler.EventHandler, prct ...predicate.Predicate) {
+	ks.handler = handler.ObjectFuncAdapter[T](h)
+	ks.predicates = predicate.ObjectPredicatesAdapter[T](prct...)
 }
 
 // Start is internal and should be called only by the Controller to register an EventHandler with the Informer

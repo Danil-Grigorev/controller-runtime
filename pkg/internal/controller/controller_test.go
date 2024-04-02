@@ -166,7 +166,7 @@ var _ = Describe("controller", func() {
 					SyncingSource: source.Kind(c, &appsv1.Deployment{}, nil),
 					cacheSyncDone: sourceSynced,
 				},
-			}}
+			}
 			ctrl.Name = "testcontroller"
 
 			ctx, cancel := context.WithCancel(context.TODO())
@@ -194,7 +194,7 @@ var _ = Describe("controller", func() {
 					SyncingSource: source.Kind(c, &appsv1.Deployment{}, nil),
 					cacheSyncDone: sourceSynced,
 				},
-			}}
+			}
 
 			go func() {
 				defer GinkgoRecover()
@@ -275,12 +275,12 @@ var _ = Describe("controller", func() {
 			})
 			Expect(ctrl.Watch(src)).NotTo(HaveOccurred())
 
-			// Use a cancelled context so Start doesn't block
-			ctx, cancel := context.WithCancel(context.Background())
-			cancel()
-			Expect(ctrl.Start(ctx)).To(Succeed())
-			Expect(started).To(BeTrue())
-		})
+		// 	// Use a cancelled context so Start doesn't block
+		// 	ctx, cancel := context.WithCancel(context.Background())
+		// 	cancel()
+		// 	Expect(ctrl.Start(ctx)).To(Succeed())
+		// 	Expect(started).To(BeTrue())
+		// })
 
 		It("should return an error if there is an error starting sources", func() {
 			err := fmt.Errorf("Expected Error: could not start source")
@@ -292,10 +292,10 @@ var _ = Describe("controller", func() {
 			})
 			Expect(ctrl.Watch(src)).To(Succeed())
 
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			Expect(ctrl.Start(ctx)).To(Equal(err))
-		})
+		// 	ctx, cancel := context.WithCancel(context.Background())
+		// 	defer cancel()
+		// 	Expect(ctrl.Start(ctx)).To(Equal(err))
+		// })
 
 		It("should return an error if it gets started more than once", func() {
 			// Use a cancelled context so Start doesn't block

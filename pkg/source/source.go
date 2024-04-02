@@ -50,6 +50,20 @@ type Source interface {
 // will call its WaitForSync prior to starting workers.
 type SyncingSource interface {
 	Source
+	Syncing
+}
+
+type PrepareSyncing interface {
+	SyncingSource
+	SourcePrepare
+}
+
+type ObjectPrepare[T any] interface {
+	SyncingSource
+	ObjectSourcePrepare[T]
+}
+
+type Syncing interface {
 	WaitForSync(ctx context.Context) error
 }
 
@@ -92,10 +106,23 @@ type channel[T any] struct {
 
 	// destLock is to ensure the destination channels are safely added/removed
 	destLock sync.Mutex
+
+	predicates []predicate.Predicate
+
+	handler handler.EventHandler
 }
 
 func (cs *channel[T]) String() string {
 	return fmt.Sprintf("channel source: %p", cs)
+}
+
+// Prepare implements Source preparation and should only be called when handler and predicates are available.
+func (cs *Channel) Prepare(
+	handler handler.EventHandler,
+	prct ...predicate.Predicate,
+) {
+	cs.predicates = prct
+	cs.handler = handler
 }
 
 // Start implements Source and should only be called by the Controller.
@@ -195,7 +222,15 @@ type Informer struct {
 	Predicates []predicate.Predicate
 }
 
-var _ Source = &Informer{}
+var _ SourcePrepare = &Informer{}
+
+func (is *Informer) Prepare(
+	h handler.EventHandler,
+	prct ...predicate.Predicate,
+) {
+	is.handler = h
+	is.predicates = prct
+}
 
 // Start is internal and should be called only by the Controller to register an EventHandler with the Informer
 // to enqueue reconcile.Requests.
@@ -219,7 +254,8 @@ func (is *Informer) String() string {
 	return fmt.Sprintf("informer source: %p", is.Informer)
 }
 
-var _ Source = Func(nil)
+// // Func is no longer compatible
+// var _ Source = Func(nil)
 
 // Func is a function that implements Source.
 type Func func(context.Context, workqueue.RateLimitingInterface) error
@@ -229,6 +265,6 @@ func (f Func) Start(ctx context.Context, queue workqueue.RateLimitingInterface) 
 	return f(ctx, queue)
 }
 
-func (f Func) String() string {
-	return fmt.Sprintf("func source: %p", f)
-}
+// func (f Func) String() string {
+// 	return fmt.Sprintf("func source: %p", f)
+// }
