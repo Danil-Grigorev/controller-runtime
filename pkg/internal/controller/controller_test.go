@@ -127,7 +127,7 @@ var _ = Describe("controller", func() {
 		It("should return an error if there is an error waiting for the informers", func() {
 			f := false
 			ctrl.startWatches = []watchDescription{{
-				src: source.Kind(&informertest.FakeInformers{Synced: &f}, &corev1.Pod{}, nil),
+				src: source.Kind(&informertest.FakeInformers{Synced: &f}, &corev1.Pod{}, &handler.TypedEnqueueRequestForObject[*corev1.Pod]{}),
 			}}
 			ctrl.Name = "foo"
 			ctx, cancel := context.WithCancel(context.Background())
@@ -145,7 +145,7 @@ var _ = Describe("controller", func() {
 			c = &cacheWithIndefinitelyBlockingGetInformer{c}
 
 			ctrl.startWatches = []watchDescription{{
-				src: source.Kind(c, &appsv1.Deployment{}, nil),
+				src: source.Kind(c, &appsv1.Deployment{}, &handler.TypedEnqueueRequestForObject[*appsv1.Deployment]{}),
 			}}
 			ctrl.Name = "testcontroller"
 
@@ -226,16 +226,15 @@ var _ = Describe("controller", func() {
 				Object: p,
 			}
 
-			ins := &source.Channel{
-				Source: ch,
-				Handler: handler.Funcs{
+			ins := source.Channel(
+				ch,
+				handler.Funcs{
 					GenericFunc: func(ctx context.Context, evt event.GenericEvent, q workqueue.RateLimitingInterface) {
 						defer GinkgoRecover()
 						close(processed)
 					},
 				},
-			}
-			ins.DestBufferSize = 1
+			)
 
 			// send the event to the channel
 			ch <- evt
@@ -255,7 +254,7 @@ var _ = Describe("controller", func() {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			ins := &source.Channel{}
+			ins := source.Channel[string](nil, nil)
 			ctrl.startWatches = []watchDescription{{
 				src: ins,
 			}}
