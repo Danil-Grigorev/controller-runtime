@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/interfaces"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -37,7 +38,7 @@ import (
 )
 
 var _ = Describe("Source", func() {
-	var instance1, instance2 source.SourcePrepare
+	var instance1, instance2 interfaces.PrepareSource
 	var obj client.Object
 	var q workqueue.RateLimitingInterface
 	var c1, c2 chan interface{}

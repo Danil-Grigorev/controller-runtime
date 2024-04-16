@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/interfaces"
 	internal "sigs.k8s.io/controller-runtime/pkg/internal/source"
 
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -116,13 +117,19 @@ func (cs *channel[T]) String() string {
 	return fmt.Sprintf("channel source: %p", cs)
 }
 
+func (cs *Channel) WaitForSync(ctx context.Context) error {
+	return nil
+}
+
 // Prepare implements Source preparation and should only be called when handler and predicates are available.
 func (cs *Channel) Prepare(
 	handler handler.EventHandler,
 	prct ...predicate.Predicate,
-) {
+) SyncingSource {
 	cs.predicates = prct
 	cs.handler = handler
+
+	return cs
 }
 
 // Start implements Source and should only be called by the Controller.
@@ -222,14 +229,20 @@ type Informer struct {
 	Predicates []predicate.Predicate
 }
 
-var _ SourcePrepare = &Informer{}
+var _ PrepareSource = &Informer{}
 
 func (is *Informer) Prepare(
 	h handler.EventHandler,
 	prct ...predicate.Predicate,
-) {
+) SyncingSource {
 	is.handler = h
 	is.predicates = prct
+
+	return is
+}
+
+func (cs *Informer) WaitForSync(ctx context.Context) error {
+	return nil
 }
 
 // Start is internal and should be called only by the Controller to register an EventHandler with the Informer
