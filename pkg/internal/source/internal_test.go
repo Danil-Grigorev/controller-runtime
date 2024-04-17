@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	internal "sigs.k8s.io/controller-runtime/pkg/internal/source"
 
@@ -34,39 +35,39 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-func newFunc[T any](_ T) *handler.ObjectFuncs[T] {
-	return &handler.ObjectFuncs[T]{
-		CreateFunc: func(context.Context, T, workqueue.RateLimitingInterface) {
+func newFunc[T any](_ T) *handler.TypedFuncs[T] {
+	return &handler.TypedFuncs[T]{
+		CreateFunc: func(context.Context, event.TypedCreateEvent[T], workqueue.RateLimitingInterface) {
 			defer GinkgoRecover()
 			Fail("Did not expect CreateEvent to be called.")
 		},
-		DeleteFunc: func(context.Context, T, workqueue.RateLimitingInterface) {
+		DeleteFunc: func(context.Context, event.TypedDeleteEvent[T], workqueue.RateLimitingInterface) {
 			defer GinkgoRecover()
 			Fail("Did not expect DeleteEvent to be called.")
 		},
-		UpdateFunc: func(context.Context, T, T, workqueue.RateLimitingInterface) {
+		UpdateFunc: func(context.Context, event.TypedUpdateEvent[T], workqueue.RateLimitingInterface) {
 			defer GinkgoRecover()
 			Fail("Did not expect UpdateEvent to be called.")
 		},
-		GenericFunc: func(context.Context, T, workqueue.RateLimitingInterface) {
+		GenericFunc: func(context.Context, event.TypedGenericEvent[T], workqueue.RateLimitingInterface) {
 			defer GinkgoRecover()
 			Fail("Did not expect GenericEvent to be called.")
 		},
 	}
 }
 
-func newSetFunc[T any](_ T, set *bool) *handler.ObjectFuncs[T] {
-	return &handler.ObjectFuncs[T]{
-		CreateFunc: func(context.Context, T, workqueue.RateLimitingInterface) {
+func newSetFunc[T any](_ T, set *bool) *handler.TypedFuncs[T] {
+	return &handler.TypedFuncs[T]{
+		CreateFunc: func(context.Context, event.TypedCreateEvent[T], workqueue.RateLimitingInterface) {
 			*set = true
 		},
-		DeleteFunc: func(context.Context, T, workqueue.RateLimitingInterface) {
+		DeleteFunc: func(context.Context, event.TypedDeleteEvent[T], workqueue.RateLimitingInterface) {
 			*set = true
 		},
-		UpdateFunc: func(context.Context, T, T, workqueue.RateLimitingInterface) {
+		UpdateFunc: func(context.Context, event.TypedUpdateEvent[T], workqueue.RateLimitingInterface) {
 			*set = true
 		},
-		GenericFunc: func(context.Context, T, workqueue.RateLimitingInterface) {
+		GenericFunc: func(context.Context, event.TypedGenericEvent[T], workqueue.RateLimitingInterface) {
 			*set = true
 		},
 	}
@@ -76,8 +77,8 @@ var _ = Describe("Internal", func() {
 	var ctx = context.Background()
 	var instance *internal.EventHandler[*corev1.Pod]
 	var partialMetadataInstance *internal.EventHandler[*metav1.PartialObjectMetadata]
-	var funcs, setfuncs *handler.ObjectFuncs[*corev1.Pod]
-	var metafuncs, metasetfuncs *handler.ObjectFuncs[*metav1.PartialObjectMetadata]
+	var funcs, setfuncs *handler.TypedFuncs[*corev1.Pod]
+	var metafuncs, metasetfuncs *handler.TypedFuncs[*metav1.PartialObjectMetadata]
 	var set bool
 	BeforeEach(func() {
 		funcs = newFunc(&corev1.Pod{})
@@ -107,24 +108,24 @@ var _ = Describe("Internal", func() {
 		})
 
 		It("should create a CreateEvent", func() {
-			funcs.CreateFunc = func(ctx context.Context, obj *corev1.Pod, q workqueue.RateLimitingInterface) {
+			funcs.CreateFunc = func(ctx context.Context, obj event.TypedCreateEvent[*corev1.Pod], q workqueue.RateLimitingInterface) {
 				defer GinkgoRecover()
-				Expect(obj).To(Equal(pod))
+				Expect(obj.Object).To(Equal(pod))
 			}
 			instance.OnAdd(pod)
 		})
 
 		It("should used Predicates to filter CreateEvents", func() {
-			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.ObjectPredicate[*corev1.Pod]{
-				predicate.ObjectFuncs[*corev1.Pod]{CreateFunc: func(*corev1.Pod) bool { return false }},
+			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.TypedPredicate[*corev1.Pod]{
+				predicate.TypedFuncs[*corev1.Pod]{CreateFunc: func(event.TypedCreateEvent[*corev1.Pod]) bool { return false }},
 			})
 			set = false
 			instance.OnAdd(pod)
 			Expect(set).To(BeFalse())
 
 			set = false
-			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.ObjectPredicate[*corev1.Pod]{
-				predicate.ObjectFuncs[*corev1.Pod]{CreateFunc: func(*corev1.Pod) bool {
+			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.TypedPredicate[*corev1.Pod]{
+				predicate.TypedFuncs[*corev1.Pod]{CreateFunc: func(event.TypedCreateEvent[*corev1.Pod]) bool {
 					return true
 				}},
 			})
@@ -132,65 +133,65 @@ var _ = Describe("Internal", func() {
 			Expect(set).To(BeTrue())
 
 			set = false
-			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.ObjectPredicate[*corev1.Pod]{
-				predicate.ObjectFuncs[*corev1.Pod]{CreateFunc: func(*corev1.Pod) bool { return true }},
-				predicate.ObjectFuncs[*corev1.Pod]{CreateFunc: func(*corev1.Pod) bool { return false }},
+			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.TypedPredicate[*corev1.Pod]{
+				predicate.TypedFuncs[*corev1.Pod]{CreateFunc: func(event.TypedCreateEvent[*corev1.Pod]) bool { return true }},
+				predicate.TypedFuncs[*corev1.Pod]{CreateFunc: func(event.TypedCreateEvent[*corev1.Pod]) bool { return false }},
 			})
 			instance.OnAdd(pod)
 			Expect(set).To(BeFalse())
 
 			set = false
-			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.ObjectPredicate[*corev1.Pod]{
-				predicate.ObjectFuncs[*corev1.Pod]{CreateFunc: func(*corev1.Pod) bool { return false }},
-				predicate.ObjectFuncs[*corev1.Pod]{CreateFunc: func(*corev1.Pod) bool { return true }},
+			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.TypedPredicate[*corev1.Pod]{
+				predicate.TypedFuncs[*corev1.Pod]{CreateFunc: func(event.TypedCreateEvent[*corev1.Pod]) bool { return false }},
+				predicate.TypedFuncs[*corev1.Pod]{CreateFunc: func(event.TypedCreateEvent[*corev1.Pod]) bool { return true }},
 			})
 			instance.OnAdd(pod)
 			Expect(set).To(BeFalse())
 
 			set = false
-			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.ObjectPredicate[*corev1.Pod]{
-				predicate.ObjectFuncs[*corev1.Pod]{CreateFunc: func(*corev1.Pod) bool { return true }},
-				predicate.ObjectFuncs[*corev1.Pod]{CreateFunc: func(*corev1.Pod) bool { return true }},
+			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.TypedPredicate[*corev1.Pod]{
+				predicate.TypedFuncs[*corev1.Pod]{CreateFunc: func(event.TypedCreateEvent[*corev1.Pod]) bool { return true }},
+				predicate.TypedFuncs[*corev1.Pod]{CreateFunc: func(event.TypedCreateEvent[*corev1.Pod]) bool { return true }},
 			})
 			instance.OnAdd(pod)
 			Expect(set).To(BeTrue())
 		})
 
 		It("should use Predicates to filter CreateEvents on PartialObjectMetadata", func() {
-			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.ObjectPredicate[*metav1.PartialObjectMetadata]{
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{CreateFunc: func(obj *metav1.PartialObjectMetadata) bool { return false }},
+			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.TypedPredicate[*metav1.PartialObjectMetadata]{
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{CreateFunc: func(obj event.TypedCreateEvent[*metav1.PartialObjectMetadata]) bool { return false }},
 			})
 			set = false
 			partialMetadataInstance.OnAdd(pom)
 			Expect(set).To(BeFalse())
 
 			set = false
-			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.ObjectPredicate[*metav1.PartialObjectMetadata]{
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{CreateFunc: func(*metav1.PartialObjectMetadata) bool { return true }},
+			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.TypedPredicate[*metav1.PartialObjectMetadata]{
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{CreateFunc: func(event.TypedCreateEvent[*metav1.PartialObjectMetadata]) bool { return true }},
 			})
 			partialMetadataInstance.OnAdd(pom)
 			Expect(set).To(BeTrue())
 
 			set = false
-			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.ObjectPredicate[*metav1.PartialObjectMetadata]{
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{CreateFunc: func(*metav1.PartialObjectMetadata) bool { return true }},
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{CreateFunc: func(*metav1.PartialObjectMetadata) bool { return false }},
+			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.TypedPredicate[*metav1.PartialObjectMetadata]{
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{CreateFunc: func(event.TypedCreateEvent[*metav1.PartialObjectMetadata]) bool { return true }},
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{CreateFunc: func(event.TypedCreateEvent[*metav1.PartialObjectMetadata]) bool { return false }},
 			})
 			partialMetadataInstance.OnAdd(pom)
 			Expect(set).To(BeFalse())
 
 			set = false
-			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.ObjectPredicate[*metav1.PartialObjectMetadata]{
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{CreateFunc: func(*metav1.PartialObjectMetadata) bool { return false }},
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{CreateFunc: func(*metav1.PartialObjectMetadata) bool { return true }},
+			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.TypedPredicate[*metav1.PartialObjectMetadata]{
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{CreateFunc: func(event.TypedCreateEvent[*metav1.PartialObjectMetadata]) bool { return false }},
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{CreateFunc: func(event.TypedCreateEvent[*metav1.PartialObjectMetadata]) bool { return true }},
 			})
 			partialMetadataInstance.OnAdd(pom)
 			Expect(set).To(BeFalse())
 
 			set = false
-			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.ObjectPredicate[*metav1.PartialObjectMetadata]{
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{CreateFunc: func(*metav1.PartialObjectMetadata) bool { return true }},
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{CreateFunc: func(*metav1.PartialObjectMetadata) bool { return true }},
+			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.TypedPredicate[*metav1.PartialObjectMetadata]{
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{CreateFunc: func(event.TypedCreateEvent[*metav1.PartialObjectMetadata]) bool { return true }},
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{CreateFunc: func(event.TypedCreateEvent[*metav1.PartialObjectMetadata]) bool { return true }},
 			})
 			partialMetadataInstance.OnAdd(pom)
 			Expect(set).To(BeTrue())
@@ -213,49 +214,49 @@ var _ = Describe("Internal", func() {
 		})
 
 		It("should create an UpdateEvent", func() {
-			funcs.UpdateFunc = func(ctx context.Context, old *corev1.Pod, new *corev1.Pod, q workqueue.RateLimitingInterface) {
+			funcs.UpdateFunc = func(ctx context.Context, ev event.TypedUpdateEvent[*corev1.Pod], q workqueue.RateLimitingInterface) {
 				defer GinkgoRecover()
-				Expect(old).To(Equal(pod))
-				Expect(new).To(Equal(newPod))
+				Expect(ev.ObjectOld).To(Equal(pod))
+				Expect(ev.ObjectNew).To(Equal(newPod))
 			}
 			instance.OnUpdate(pod, newPod)
 		})
 
 		It("should used Predicates to filter UpdateEvents", func() {
 			set = false
-			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.ObjectPredicate[*corev1.Pod]{
-				predicate.ObjectFuncs[*corev1.Pod]{UpdateFunc: func(old, new *corev1.Pod) bool { return false }},
+			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.TypedPredicate[*corev1.Pod]{
+				predicate.TypedFuncs[*corev1.Pod]{UpdateFunc: func(event.TypedUpdateEvent[*corev1.Pod]) bool { return false }},
 			})
 			instance.OnUpdate(pod, newPod)
 			Expect(set).To(BeFalse())
 
 			set = false
-			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.ObjectPredicate[*corev1.Pod]{
-				predicate.ObjectFuncs[*corev1.Pod]{UpdateFunc: func(old, new *corev1.Pod) bool { return true }},
+			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.TypedPredicate[*corev1.Pod]{
+				predicate.TypedFuncs[*corev1.Pod]{UpdateFunc: func(event.TypedUpdateEvent[*corev1.Pod]) bool { return true }},
 			})
 			instance.OnUpdate(pod, newPod)
 			Expect(set).To(BeTrue())
 
 			set = false
-			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.ObjectPredicate[*corev1.Pod]{
-				predicate.ObjectFuncs[*corev1.Pod]{UpdateFunc: func(old, new *corev1.Pod) bool { return true }},
-				predicate.ObjectFuncs[*corev1.Pod]{UpdateFunc: func(old, new *corev1.Pod) bool { return false }},
+			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.TypedPredicate[*corev1.Pod]{
+				predicate.TypedFuncs[*corev1.Pod]{UpdateFunc: func(event.TypedUpdateEvent[*corev1.Pod]) bool { return true }},
+				predicate.TypedFuncs[*corev1.Pod]{UpdateFunc: func(event.TypedUpdateEvent[*corev1.Pod]) bool { return false }},
 			})
 			instance.OnUpdate(pod, newPod)
 			Expect(set).To(BeFalse())
 
 			set = false
-			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.ObjectPredicate[*corev1.Pod]{
-				predicate.ObjectFuncs[*corev1.Pod]{UpdateFunc: func(old, new *corev1.Pod) bool { return false }},
-				predicate.ObjectFuncs[*corev1.Pod]{UpdateFunc: func(old, new *corev1.Pod) bool { return true }},
+			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.TypedPredicate[*corev1.Pod]{
+				predicate.TypedFuncs[*corev1.Pod]{UpdateFunc: func(event.TypedUpdateEvent[*corev1.Pod]) bool { return false }},
+				predicate.TypedFuncs[*corev1.Pod]{UpdateFunc: func(event.TypedUpdateEvent[*corev1.Pod]) bool { return true }},
 			})
 			instance.OnUpdate(pod, newPod)
 			Expect(set).To(BeFalse())
 
 			set = false
-			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.ObjectPredicate[*corev1.Pod]{
-				predicate.ObjectFuncs[*corev1.Pod]{CreateFunc: func(*corev1.Pod) bool { return true }},
-				predicate.ObjectFuncs[*corev1.Pod]{CreateFunc: func(*corev1.Pod) bool { return true }},
+			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.TypedPredicate[*corev1.Pod]{
+				predicate.TypedFuncs[*corev1.Pod]{CreateFunc: func(event.TypedCreateEvent[*corev1.Pod]) bool { return true }},
+				predicate.TypedFuncs[*corev1.Pod]{CreateFunc: func(event.TypedCreateEvent[*corev1.Pod]) bool { return true }},
 			})
 			instance.OnUpdate(pod, newPod)
 			Expect(set).To(BeTrue())
@@ -263,39 +264,39 @@ var _ = Describe("Internal", func() {
 
 		It("should use Predicates to filter UpdateEvents on PartialObjectMetadata", func() {
 			set = false
-			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.ObjectPredicate[*metav1.PartialObjectMetadata]{
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{UpdateFunc: func(old, new *metav1.PartialObjectMetadata) bool { return false }},
+			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.TypedPredicate[*metav1.PartialObjectMetadata]{
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{UpdateFunc: func(event.TypedUpdateEvent[*metav1.PartialObjectMetadata]) bool { return false }},
 			})
 			partialMetadataInstance.OnUpdate(pom, newPom)
 			Expect(set).To(BeFalse())
 
 			set = false
-			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.ObjectPredicate[*metav1.PartialObjectMetadata]{
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{UpdateFunc: func(old, new *metav1.PartialObjectMetadata) bool { return true }},
+			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.TypedPredicate[*metav1.PartialObjectMetadata]{
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{UpdateFunc: func(event.TypedUpdateEvent[*metav1.PartialObjectMetadata]) bool { return true }},
 			})
 			partialMetadataInstance.OnUpdate(pom, newPom)
 			Expect(set).To(BeTrue())
 
 			set = false
-			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.ObjectPredicate[*metav1.PartialObjectMetadata]{
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{UpdateFunc: func(old, new *metav1.PartialObjectMetadata) bool { return true }},
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{UpdateFunc: func(old, new *metav1.PartialObjectMetadata) bool { return false }},
+			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.TypedPredicate[*metav1.PartialObjectMetadata]{
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{UpdateFunc: func(event.TypedUpdateEvent[*metav1.PartialObjectMetadata]) bool { return true }},
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{UpdateFunc: func(event.TypedUpdateEvent[*metav1.PartialObjectMetadata]) bool { return false }},
 			})
 			partialMetadataInstance.OnUpdate(pom, newPom)
 			Expect(set).To(BeFalse())
 
 			set = false
-			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.ObjectPredicate[*metav1.PartialObjectMetadata]{
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{UpdateFunc: func(old, new *metav1.PartialObjectMetadata) bool { return false }},
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{UpdateFunc: func(old, new *metav1.PartialObjectMetadata) bool { return true }},
+			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.TypedPredicate[*metav1.PartialObjectMetadata]{
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{UpdateFunc: func(event.TypedUpdateEvent[*metav1.PartialObjectMetadata]) bool { return false }},
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{UpdateFunc: func(event.TypedUpdateEvent[*metav1.PartialObjectMetadata]) bool { return true }},
 			})
 			partialMetadataInstance.OnUpdate(pom, newPom)
 			Expect(set).To(BeFalse())
 
 			set = false
-			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.ObjectPredicate[*metav1.PartialObjectMetadata]{
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{CreateFunc: func(obj *metav1.PartialObjectMetadata) bool { return true }},
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{CreateFunc: func(obj *metav1.PartialObjectMetadata) bool { return true }},
+			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.TypedPredicate[*metav1.PartialObjectMetadata]{
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{CreateFunc: func(obj event.TypedCreateEvent[*metav1.PartialObjectMetadata]) bool { return true }},
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{CreateFunc: func(obj event.TypedCreateEvent[*metav1.PartialObjectMetadata]) bool { return true }},
 			})
 			partialMetadataInstance.OnUpdate(pom, newPom)
 			Expect(set).To(BeTrue())
@@ -324,48 +325,48 @@ var _ = Describe("Internal", func() {
 		})
 
 		It("should create a DeleteEvent", func() {
-			funcs.DeleteFunc = func(ctx context.Context, obj *corev1.Pod, q workqueue.RateLimitingInterface) {
+			funcs.DeleteFunc = func(ctx context.Context, obj event.TypedDeleteEvent[*corev1.Pod], q workqueue.RateLimitingInterface) {
 				defer GinkgoRecover()
-				Expect(obj).To(Equal(pod))
+				Expect(obj.Object).To(Equal(pod))
 			}
 			instance.OnDelete(pod)
 		})
 
 		It("should used Predicates to filter DeleteEvents", func() {
 			set = false
-			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.ObjectPredicate[*corev1.Pod]{
-				predicate.ObjectFuncs[*corev1.Pod]{DeleteFunc: func(*corev1.Pod) bool { return false }},
+			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.TypedPredicate[*corev1.Pod]{
+				predicate.TypedFuncs[*corev1.Pod]{DeleteFunc: func(event.TypedDeleteEvent[*corev1.Pod]) bool { return false }},
 			})
 			instance.OnDelete(pod)
 			Expect(set).To(BeFalse())
 
 			set = false
-			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.ObjectPredicate[*corev1.Pod]{
-				predicate.ObjectFuncs[*corev1.Pod]{DeleteFunc: func(*corev1.Pod) bool { return true }},
+			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.TypedPredicate[*corev1.Pod]{
+				predicate.TypedFuncs[*corev1.Pod]{DeleteFunc: func(event.TypedDeleteEvent[*corev1.Pod]) bool { return true }},
 			})
 			instance.OnDelete(pod)
 			Expect(set).To(BeTrue())
 
 			set = false
-			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.ObjectPredicate[*corev1.Pod]{
-				predicate.ObjectFuncs[*corev1.Pod]{DeleteFunc: func(*corev1.Pod) bool { return true }},
-				predicate.ObjectFuncs[*corev1.Pod]{DeleteFunc: func(*corev1.Pod) bool { return false }},
+			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.TypedPredicate[*corev1.Pod]{
+				predicate.TypedFuncs[*corev1.Pod]{DeleteFunc: func(event.TypedDeleteEvent[*corev1.Pod]) bool { return true }},
+				predicate.TypedFuncs[*corev1.Pod]{DeleteFunc: func(event.TypedDeleteEvent[*corev1.Pod]) bool { return false }},
 			})
 			instance.OnDelete(pod)
 			Expect(set).To(BeFalse())
 
 			set = false
-			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.ObjectPredicate[*corev1.Pod]{
-				predicate.ObjectFuncs[*corev1.Pod]{DeleteFunc: func(*corev1.Pod) bool { return false }},
-				predicate.ObjectFuncs[*corev1.Pod]{DeleteFunc: func(*corev1.Pod) bool { return true }},
+			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.TypedPredicate[*corev1.Pod]{
+				predicate.TypedFuncs[*corev1.Pod]{DeleteFunc: func(event.TypedDeleteEvent[*corev1.Pod]) bool { return false }},
+				predicate.TypedFuncs[*corev1.Pod]{DeleteFunc: func(event.TypedDeleteEvent[*corev1.Pod]) bool { return true }},
 			})
 			instance.OnDelete(pod)
 			Expect(set).To(BeFalse())
 
 			set = false
-			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.ObjectPredicate[*corev1.Pod]{
-				predicate.ObjectFuncs[*corev1.Pod]{DeleteFunc: func(*corev1.Pod) bool { return true }},
-				predicate.ObjectFuncs[*corev1.Pod]{DeleteFunc: func(*corev1.Pod) bool { return true }},
+			instance = internal.NewEventHandler(ctx, &controllertest.Queue{}, setfuncs, []predicate.TypedPredicate[*corev1.Pod]{
+				predicate.TypedFuncs[*corev1.Pod]{DeleteFunc: func(event.TypedDeleteEvent[*corev1.Pod]) bool { return true }},
+				predicate.TypedFuncs[*corev1.Pod]{DeleteFunc: func(event.TypedDeleteEvent[*corev1.Pod]) bool { return true }},
 			})
 			instance.OnDelete(pod)
 			Expect(set).To(BeTrue())
@@ -373,39 +374,39 @@ var _ = Describe("Internal", func() {
 
 		It("should use Predicates to filter DeleteEvents", func() {
 			set = false
-			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.ObjectPredicate[*metav1.PartialObjectMetadata]{
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{DeleteFunc: func(*metav1.PartialObjectMetadata) bool { return false }},
+			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.TypedPredicate[*metav1.PartialObjectMetadata]{
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{DeleteFunc: func(event.TypedDeleteEvent[*metav1.PartialObjectMetadata]) bool { return false }},
 			})
 			partialMetadataInstance.OnDelete(pom)
 			Expect(set).To(BeFalse())
 
 			set = false
-			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.ObjectPredicate[*metav1.PartialObjectMetadata]{
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{DeleteFunc: func(*metav1.PartialObjectMetadata) bool { return true }},
+			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.TypedPredicate[*metav1.PartialObjectMetadata]{
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{DeleteFunc: func(event.TypedDeleteEvent[*metav1.PartialObjectMetadata]) bool { return true }},
 			})
 			partialMetadataInstance.OnDelete(pom)
 			Expect(set).To(BeTrue())
 
 			set = false
-			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.ObjectPredicate[*metav1.PartialObjectMetadata]{
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{DeleteFunc: func(*metav1.PartialObjectMetadata) bool { return true }},
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{DeleteFunc: func(*metav1.PartialObjectMetadata) bool { return false }},
+			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.TypedPredicate[*metav1.PartialObjectMetadata]{
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{DeleteFunc: func(event.TypedDeleteEvent[*metav1.PartialObjectMetadata]) bool { return true }},
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{DeleteFunc: func(event.TypedDeleteEvent[*metav1.PartialObjectMetadata]) bool { return false }},
 			})
 			partialMetadataInstance.OnDelete(pom)
 			Expect(set).To(BeFalse())
 
 			set = false
-			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.ObjectPredicate[*metav1.PartialObjectMetadata]{
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{DeleteFunc: func(*metav1.PartialObjectMetadata) bool { return false }},
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{DeleteFunc: func(*metav1.PartialObjectMetadata) bool { return true }},
+			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.TypedPredicate[*metav1.PartialObjectMetadata]{
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{DeleteFunc: func(event.TypedDeleteEvent[*metav1.PartialObjectMetadata]) bool { return false }},
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{DeleteFunc: func(event.TypedDeleteEvent[*metav1.PartialObjectMetadata]) bool { return true }},
 			})
 			partialMetadataInstance.OnDelete(pom)
 			Expect(set).To(BeFalse())
 
 			set = false
-			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.ObjectPredicate[*metav1.PartialObjectMetadata]{
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{DeleteFunc: func(*metav1.PartialObjectMetadata) bool { return true }},
-				predicate.ObjectFuncs[*metav1.PartialObjectMetadata]{DeleteFunc: func(*metav1.PartialObjectMetadata) bool { return true }},
+			partialMetadataInstance = internal.NewEventHandler(ctx, &controllertest.Queue{}, metasetfuncs, []predicate.TypedPredicate[*metav1.PartialObjectMetadata]{
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{DeleteFunc: func(event.TypedDeleteEvent[*metav1.PartialObjectMetadata]) bool { return true }},
+				predicate.TypedFuncs[*metav1.PartialObjectMetadata]{DeleteFunc: func(event.TypedDeleteEvent[*metav1.PartialObjectMetadata]) bool { return true }},
 			})
 			partialMetadataInstance.OnDelete(pom)
 			Expect(set).To(BeTrue())

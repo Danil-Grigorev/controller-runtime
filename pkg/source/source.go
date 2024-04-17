@@ -26,7 +26,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/interfaces"
 	internal "sigs.k8s.io/controller-runtime/pkg/internal/source"
 
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -47,32 +46,11 @@ type Source interface {
 	Start(context.Context, workqueue.RateLimitingInterface) error
 }
 
-// Source is a source of events (e.g. Create, Update, Delete operations on Kubernetes Objects, Webhook callbacks, etc)
-// which should be processed by event.EventHandlers to enqueue reconcile.Requests.
-//
-// * Use Kind for events originating in the cluster (e.g. Pod Create, Pod Update, Deployment Update).
-//
-// * Use Channel for events originating outside the cluster (e.g. GitHub Webhook callback, Polling external urls).
-//
-// Users may build their own Source implementations.
-type Source = interfaces.Source
-
-// Syncing allows to wait for synchronization with context
-type Syncing = interfaces.Syncing
-
 // SyncingSource is a source that needs syncing prior to being usable. The controller
 // will call its WaitForSync prior to starting workers.
-type SyncingSource = interfaces.SyncingSource
-
-// PrepareSyncing - a SyncingSource that also implements SourcePrepare and has WaitForSync method
-type PrepareSyncing = interfaces.PrepareSyncing
-
-// PrepareSource - Prepares a Source to be used with EventHandler and predicates
-type PrepareSource = interfaces.PrepareSource
-
-// PrepareSyncingObject - a SyncingSource that also implements PrepareSourceObject[T] and has WaitForSync method
-type PrepareSyncingObject[T any] interface {
-	interfaces.PrepareSyncingObject[T]
+type SyncingSource interface {
+	Source
+	WaitForSync(ctx context.Context) error
 }
 
 // Kind creates a KindSource with the given cache provider.
@@ -114,30 +92,10 @@ type channel[T any] struct {
 
 	// destLock is to ensure the destination channels are safely added/removed
 	destLock sync.Mutex
-
-	predicates []predicate.Predicate
-
-	handler handler.EventHandler
 }
 
 func (cs *channel[T]) String() string {
 	return fmt.Sprintf("channel source: %p", cs)
-}
-
-// WaitForSync implements the source.SyncingSource interface
-func (cs *Channel) WaitForSync(ctx context.Context) error {
-	return nil
-}
-
-// Prepare implements Source preparation and should only be called when handler and predicates are available.
-func (cs *Channel) Prepare(
-	handler handler.EventHandler,
-	prct ...predicate.Predicate,
-) SyncingSource {
-	cs.predicates = prct
-	cs.handler = handler
-
-	return cs
 }
 
 // Start implements Source and should only be called by the Controller.
@@ -235,24 +193,6 @@ type Informer struct {
 	Informer   cache.Informer
 	Handler    handler.EventHandler
 	Predicates []predicate.Predicate
-}
-
-var _ PrepareSource = &Informer{}
-
-// Prepare implements the source.PrepareSyncing interface
-func (is *Informer) Prepare(
-	h handler.EventHandler,
-	prct ...predicate.Predicate,
-) SyncingSource {
-	is.handler = h
-	is.predicates = prct
-
-	return is
-}
-
-// WaitForSync implements the source.SyncingSource interface
-func (is *Informer) WaitForSync(ctx context.Context) error {
-	return nil
 }
 
 // Start is internal and should be called only by the Controller to register an EventHandler with the Informer

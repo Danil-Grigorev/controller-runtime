@@ -69,7 +69,7 @@ func (e *EventHandler[T]) OnAdd(obj interface{}) {
 
 	// Pull Object out of the object
 	if o, ok := obj.(T); ok {
-		object = o
+		c.Object = o
 	} else {
 		log.Error(nil, "OnAdd missing Object",
 			"object", obj, "type", fmt.Sprintf("%T", obj))
@@ -77,7 +77,7 @@ func (e *EventHandler[T]) OnAdd(obj interface{}) {
 	}
 
 	for _, p := range e.predicates {
-		if !p.OnCreate(object) {
+		if !p.Create(c) {
 			return
 		}
 	}
@@ -85,7 +85,7 @@ func (e *EventHandler[T]) OnAdd(obj interface{}) {
 	// Invoke create handler
 	ctx, cancel := context.WithCancel(e.ctx)
 	defer cancel()
-	e.handler.OnCreate(ctx, object, e.queue)
+	e.handler.Create(ctx, c, e.queue)
 }
 
 // OnUpdate creates UpdateEvent and calls Update on EventHandler.
@@ -93,7 +93,7 @@ func (e *EventHandler[T]) OnUpdate(oldObj, newObj interface{}) {
 	u := event.TypedUpdateEvent[T]{}
 
 	if o, ok := oldObj.(T); ok {
-		objOld = o
+		u.ObjectOld = o
 	} else {
 		log.Error(nil, "OnUpdate missing ObjectOld",
 			"object", oldObj, "type", fmt.Sprintf("%T", oldObj))
@@ -102,7 +102,7 @@ func (e *EventHandler[T]) OnUpdate(oldObj, newObj interface{}) {
 
 	// Pull Object out of the object
 	if o, ok := newObj.(T); ok {
-		objNew = o
+		u.ObjectNew = o
 	} else {
 		log.Error(nil, "OnUpdate missing ObjectNew",
 			"object", newObj, "type", fmt.Sprintf("%T", newObj))
@@ -110,7 +110,7 @@ func (e *EventHandler[T]) OnUpdate(oldObj, newObj interface{}) {
 	}
 
 	for _, p := range e.predicates {
-		if !p.OnUpdate(objOld, objNew) {
+		if !p.Update(u) {
 			return
 		}
 	}
@@ -118,7 +118,7 @@ func (e *EventHandler[T]) OnUpdate(oldObj, newObj interface{}) {
 	// Invoke update handler
 	ctx, cancel := context.WithCancel(e.ctx)
 	defer cancel()
-	e.handler.OnUpdate(ctx, objOld, objNew, e.queue)
+	e.handler.Update(ctx, u, e.queue)
 }
 
 // OnDelete creates DeleteEvent and calls Delete on EventHandler.
@@ -147,7 +147,7 @@ func (e *EventHandler[T]) OnDelete(obj interface{}) {
 
 	// Pull Object out of the object
 	if o, ok := obj.(T); ok {
-		object = o
+		d.Object = o
 	} else {
 		log.Error(nil, "OnDelete missing Object",
 			"object", obj, "type", fmt.Sprintf("%T", obj))
@@ -155,7 +155,7 @@ func (e *EventHandler[T]) OnDelete(obj interface{}) {
 	}
 
 	for _, p := range e.predicates {
-		if !p.OnDelete(object) {
+		if !p.Delete(d) {
 			return
 		}
 	}
@@ -163,5 +163,5 @@ func (e *EventHandler[T]) OnDelete(obj interface{}) {
 	// Invoke delete handler
 	ctx, cancel := context.WithCancel(e.ctx)
 	defer cancel()
-	e.handler.OnDelete(ctx, object, e.queue)
+	e.handler.Delete(ctx, d, e.queue)
 }

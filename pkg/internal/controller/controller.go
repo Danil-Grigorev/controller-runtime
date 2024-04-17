@@ -186,7 +186,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		c.LogConstructor(nil).Info("Starting Controller")
 
 		for _, watch := range c.startWatches {
-			syncingSource, ok := watch.(source.Syncing)
+			syncingSource, ok := watch.(source.SyncingSource)
 			if !ok {
 				continue
 			}

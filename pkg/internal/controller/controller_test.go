@@ -126,9 +126,9 @@ var _ = Describe("controller", func() {
 	Describe("Start", func() {
 		It("should return an error if there is an error waiting for the informers", func() {
 			f := false
-			ctrl.startWatches = []watchDescription{{
-				src: source.Kind(&informertest.FakeInformers{Synced: &f}, &corev1.Pod{}, &handler.TypedEnqueueRequestForObject[*corev1.Pod]{}),
-			}}
+			ctrl.startWatches = []source.Source{
+				source.Kind(&informertest.FakeInformers{Synced: &f}, &corev1.Pod{}, &handler.TypedEnqueueRequestForObject[*corev1.Pod]{}),
+			}
 			ctrl.Name = "foo"
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -144,9 +144,9 @@ var _ = Describe("controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			c = &cacheWithIndefinitelyBlockingGetInformer{c}
 
-			ctrl.startWatches = []watchDescription{{
-				src: source.Kind(c, &appsv1.Deployment{}, &handler.TypedEnqueueRequestForObject[*appsv1.Deployment]{}),
-			}}
+			ctrl.startWatches = []source.Source{
+				source.Kind(c, &appsv1.Deployment{}, &handler.TypedEnqueueRequestForObject[*appsv1.Deployment]{}),
+			}
 			ctrl.Name = "testcontroller"
 
 			err = ctrl.Start(context.TODO())
@@ -161,11 +161,10 @@ var _ = Describe("controller", func() {
 			c, err := cache.New(cfg, cache.Options{})
 			Expect(err).NotTo(HaveOccurred())
 			c = &cacheWithIndefinitelyBlockingGetInformer{c}
-			ctrl.startWatches = []watchDescription{{
-				src: &singnallingSourceWrapper{
-					SyncingSource: source.Kind(c, &appsv1.Deployment{}, nil),
-					cacheSyncDone: sourceSynced,
-				},
+			ctrl.startWatches = []source.Source{&singnallingSourceWrapper{
+				SyncingSource: source.Kind(c, &appsv1.Deployment{}, nil),
+				cacheSyncDone: sourceSynced,
+			},
 			}
 			ctrl.Name = "testcontroller"
 
@@ -189,11 +188,10 @@ var _ = Describe("controller", func() {
 			sourceSynced := make(chan struct{})
 			c, err := cache.New(cfg, cache.Options{})
 			Expect(err).NotTo(HaveOccurred())
-			ctrl.startWatches = []watchDescription{{
-				src: &singnallingSourceWrapper{
-					SyncingSource: source.Kind(c, &appsv1.Deployment{}, nil),
-					cacheSyncDone: sourceSynced,
-				},
+			ctrl.startWatches = []source.Source{&singnallingSourceWrapper{
+				SyncingSource: source.Kind(c, &appsv1.Deployment{}, nil),
+				cacheSyncDone: sourceSynced,
+			},
 			}
 
 			go func() {
@@ -239,9 +237,7 @@ var _ = Describe("controller", func() {
 			// send the event to the channel
 			ch <- evt
 
-			ctrl.startWatches = []watchDescription{{
-				src: ins,
-			}}
+			ctrl.startWatches = []source.Source{ins}
 
 			go func() {
 				defer GinkgoRecover()
@@ -255,9 +251,7 @@ var _ = Describe("controller", func() {
 			defer cancel()
 
 			ins := source.Channel[string](nil, nil)
-			ctrl.startWatches = []watchDescription{{
-				src: ins,
-			}}
+			ctrl.startWatches = []source.Source{ins}
 
 			e := ctrl.Start(ctx)
 			Expect(e).To(HaveOccurred())
@@ -275,12 +269,12 @@ var _ = Describe("controller", func() {
 			})
 			Expect(ctrl.Watch(src)).NotTo(HaveOccurred())
 
-		// 	// Use a cancelled context so Start doesn't block
-		// 	ctx, cancel := context.WithCancel(context.Background())
-		// 	cancel()
-		// 	Expect(ctrl.Start(ctx)).To(Succeed())
-		// 	Expect(started).To(BeTrue())
-		// })
+			// Use a cancelled context so Start doesn't block
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			Expect(ctrl.Start(ctx)).To(Succeed())
+			Expect(started).To(BeTrue())
+		})
 
 		It("should return an error if there is an error starting sources", func() {
 			err := fmt.Errorf("Expected Error: could not start source")
@@ -292,10 +286,10 @@ var _ = Describe("controller", func() {
 			})
 			Expect(ctrl.Watch(src)).To(Succeed())
 
-		// 	ctx, cancel := context.WithCancel(context.Background())
-		// 	defer cancel()
-		// 	Expect(ctrl.Start(ctx)).To(Equal(err))
-		// })
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			Expect(ctrl.Start(ctx)).To(Equal(err))
+		})
 
 		It("should return an error if it gets started more than once", func() {
 			// Use a cancelled context so Start doesn't block

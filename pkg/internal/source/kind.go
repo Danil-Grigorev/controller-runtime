@@ -15,7 +15,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/interfaces"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
@@ -35,24 +34,6 @@ type Kind[T client.Object] struct {
 	// contain an error, startup and syncing finished.
 	startedErr  chan error
 	startCancel func()
-
-	predicates []predicate.ObjectPredicate[T]
-	handler    handler.ObjectHandler[T]
-}
-
-// PrepareObject implements PrepareSyncingObject preparation and should only be called when handler and predicates are available.
-func (ks *Kind[T]) PrepareObject(h handler.ObjectHandler[T], prct ...predicate.ObjectPredicate[T]) interfaces.SyncingSource {
-	ks.handler = h
-	ks.predicates = prct
-
-	return ks
-}
-
-// Prepare implements Source preparation and should only be called when handler and predicates are available.
-func (ks *Kind[T]) Prepare(h handler.EventHandler, prct ...predicate.Predicate) interfaces.SyncingSource {
-	ks.handler = handler.ObjectFuncAdapter[T](h)
-	ks.predicates = predicate.ObjectPredicatesAdapter[T](prct...)
-	return ks
 }
 
 // Start is internal and should be called only by the Controller to register an EventHandler with the Informer

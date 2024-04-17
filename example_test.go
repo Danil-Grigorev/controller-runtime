@@ -204,7 +204,7 @@ func Example_generic_customHandler() {
 	err = ctrl.
 		NewControllerManagedBy(manager).
 		For(&ExampleCRDWithConfigMapRef{}).
-		Add(builder.Watches(manager, &corev1.ConfigMap{}, handler.EnqueueRequestsFromObjectMap(func(ctx context.Context, cm *corev1.ConfigMap) []ctrl.Request {
+		Add(builder.Watches(manager, &corev1.ConfigMap{}, handler.EnqueueRequestsFromTypedMapFunc(func(ctx context.Context, cm *corev1.ConfigMap) []ctrl.Request {
 			// map a change from referenced configMap to ExampleCRDWithConfigMapRef, which causes its re-reconcile
 			crList := &ExampleCRDWithConfigMapRefList{}
 			if err := manager.GetClient().List(ctx, crList); err != nil {

@@ -38,7 +38,7 @@ import (
 )
 
 var _ = Describe("Source", func() {
-	var instance1, instance2 interfaces.PrepareSource
+	var instance1, instance2 interfaces.Source
 	var obj client.Object
 	var q workqueue.RateLimitingInterface
 	var c1, c2 chan interface{}
