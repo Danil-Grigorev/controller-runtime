@@ -47,25 +47,32 @@ type Source interface {
 	Start(context.Context, workqueue.RateLimitingInterface) error
 }
 
+// Source is a source of events (e.g. Create, Update, Delete operations on Kubernetes Objects, Webhook callbacks, etc)
+// which should be processed by event.EventHandlers to enqueue reconcile.Requests.
+//
+// * Use Kind for events originating in the cluster (e.g. Pod Create, Pod Update, Deployment Update).
+//
+// * Use Channel for events originating outside the cluster (e.g. GitHub Webhook callback, Polling external urls).
+//
+// Users may build their own Source implementations.
+type Source = interfaces.Source
+
+// Syncing allows to wait for synchronization with context
+type Syncing = interfaces.Syncing
+
 // SyncingSource is a source that needs syncing prior to being usable. The controller
 // will call its WaitForSync prior to starting workers.
-type SyncingSource interface {
-	Source
-	Syncing
-}
+type SyncingSource = interfaces.SyncingSource
 
-type PrepareSyncing interface {
-	SyncingSource
-	SourcePrepare
-}
+// PrepareSyncing - a SyncingSource that also implements SourcePrepare and has WaitForSync method
+type PrepareSyncing = interfaces.PrepareSyncing
 
-type ObjectPrepare[T any] interface {
-	SyncingSource
-	ObjectSourcePrepare[T]
-}
+// PrepareSource - Prepares a Source to be used with EventHandler and predicates
+type PrepareSource = interfaces.PrepareSource
 
-type Syncing interface {
-	WaitForSync(ctx context.Context) error
+// PrepareSyncingObject - a SyncingSource that also implements PrepareSourceObject[T] and has WaitForSync method
+type PrepareSyncingObject[T any] interface {
+	interfaces.PrepareSyncingObject[T]
 }
 
 // Kind creates a KindSource with the given cache provider.
@@ -117,6 +124,7 @@ func (cs *channel[T]) String() string {
 	return fmt.Sprintf("channel source: %p", cs)
 }
 
+// WaitForSync implements the source.SyncingSource interface
 func (cs *Channel) WaitForSync(ctx context.Context) error {
 	return nil
 }
@@ -231,6 +239,7 @@ type Informer struct {
 
 var _ PrepareSource = &Informer{}
 
+// Prepare implements the source.PrepareSyncing interface
 func (is *Informer) Prepare(
 	h handler.EventHandler,
 	prct ...predicate.Predicate,
@@ -241,7 +250,8 @@ func (is *Informer) Prepare(
 	return is
 }
 
-func (cs *Informer) WaitForSync(ctx context.Context) error {
+// WaitForSync implements the source.SyncingSource interface
+func (is *Informer) WaitForSync(ctx context.Context) error {
 	return nil
 }
 

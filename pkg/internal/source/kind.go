@@ -40,11 +40,7 @@ type Kind[T client.Object] struct {
 	handler    handler.ObjectHandler[T]
 }
 
-// SetPredicates implements source.SyncingSource.
-func (ks *Kind[T]) SetPredicates(...predicate.PredicateConstraint) {
-	panic("unimplemented")
-}
-
+// PrepareObject implements PrepareSyncingObject preparation and should only be called when handler and predicates are available.
 func (ks *Kind[T]) PrepareObject(h handler.ObjectHandler[T], prct ...predicate.ObjectPredicate[T]) interfaces.SyncingSource {
 	ks.handler = h
 	ks.predicates = prct
@@ -52,6 +48,7 @@ func (ks *Kind[T]) PrepareObject(h handler.ObjectHandler[T], prct ...predicate.O
 	return ks
 }
 
+// Prepare implements Source preparation and should only be called when handler and predicates are available.
 func (ks *Kind[T]) Prepare(h handler.EventHandler, prct ...predicate.Predicate) interfaces.SyncingSource {
 	ks.handler = handler.ObjectFuncAdapter[T](h)
 	ks.predicates = predicate.ObjectPredicatesAdapter[T](prct...)

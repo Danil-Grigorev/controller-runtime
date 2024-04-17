@@ -29,10 +29,6 @@ import (
 
 var log = logf.RuntimeLog.WithName("predicate").WithName("eventFilters")
 
-type PredicateConstraint interface {
-	Register()
-}
-
 // Predicate filters events before enqueuing the keys.
 type Predicate = TypedPredicate[client.Object]
 
@@ -124,7 +120,7 @@ func (p TypedFuncs[T]) Generic(e event.TypedGenericEvent[T]) bool {
 	return true
 }
 
-// Funcs is a function that implements Predicate.
+// ObjectFuncs is a function that implements Predicate and ObjectPrediace.
 type ObjectFuncs[T any] struct {
 	// Create returns true if the Create event should be processed
 	CreateFunc func(obj T) bool
@@ -141,9 +137,9 @@ type ObjectFuncs[T any] struct {
 
 // Update implements Predicate.
 func (p ObjectFuncs[T]) Update(e event.UpdateEvent) bool {
-	new, ok := e.ObjectNew.(T)
-	old, oldOk := e.ObjectOld.(T)
-	return ok && oldOk && p.OnUpdate(old, new)
+	newObj, newOk := e.ObjectNew.(T)
+	oldObj, oldOk := e.ObjectOld.(T)
+	return newOk && oldOk && p.OnUpdate(oldObj, newObj)
 }
 
 // Generic implements Predicate.
@@ -164,22 +160,22 @@ func (p ObjectFuncs[T]) Delete(e event.DeleteEvent) bool {
 	return ok && p.OnDelete(obj)
 }
 
-// Update implements Predicate.
+// OnUpdate implements ObjectPredicate.
 func (p ObjectFuncs[T]) OnUpdate(old, new T) bool {
 	return p.UpdateFunc == nil || p.UpdateFunc(old, new)
 }
 
-// Generic implements Predicate.
+// OnGeneric implements ObjectPredicate.
 func (p ObjectFuncs[T]) OnGeneric(obj T) bool {
 	return p.GenericFunc == nil || p.GenericFunc(obj)
 }
 
-// Create implements Predicate.
+// OnCreate implements ObjectPredicate.
 func (p ObjectFuncs[T]) OnCreate(obj T) bool {
 	return p.CreateFunc == nil || p.CreateFunc(obj)
 }
 
-// Delete implements Predicate.
+// OnDelete implements ObjectPredicate.
 func (p ObjectFuncs[T]) OnDelete(obj T) bool {
 	return p.DeleteFunc == nil || p.DeleteFunc(obj)
 }
